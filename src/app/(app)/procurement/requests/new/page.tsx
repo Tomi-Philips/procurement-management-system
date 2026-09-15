@@ -75,36 +75,53 @@ export default function NewRequestPage() {
     setSaving(true);
     const supabase = createClient();
 
-    // Generate request number using DB function
-    const { data: requestNumberData, error: numberError } = await supabase.rpc("generate_request_number");
-    const requestNumber = numberError ? `PR-${Date.now().toString().slice(-5)}` : requestNumberData;
+    let requestData: any = null;
+    let requestInsertError: any = null;
+    let requestNumber = "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data: requestNumberData, error: numberError } = await supabase.rpc("generate_request_number");
+      if (numberError || !requestNumberData) {
+        requestNumber = `PR-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+      } else {
+        requestNumber = requestNumberData;
+      }
 
-    const { data: request, error } = await supabase
-      .from("procurement_requests")
-      .insert({
-        request_number: requestNumber,
-        title,
-        department_id: departmentId,
-        requester_id: profile!.id,
-        purpose,
-        description,
-        required_date: requiredDate || null,
-        priority,
-        status: isDraft ? "draft" : "submitted",
-        estimated_total: estimatedTotal,
-      })
-      .select()
-      .single();
+      const { data: reqData, error: insertError } = await supabase
+        .from("procurement_requests")
+        .insert({
+          request_number: requestNumber,
+          title,
+          department_id: departmentId,
+          requester_id: profile!.id,
+          purpose,
+          description,
+          required_date: requiredDate || null,
+          priority,
+          status: isDraft ? "draft" : "submitted",
+          estimated_total: estimatedTotal,
+        })
+        .select()
+        .single();
 
-    if (error) {
-      toast.error("Failed to create request");
+      if (!insertError) {
+        requestData = reqData;
+        requestInsertError = null;
+        break;
+      }
+      requestInsertError = insertError;
+      if (insertError.code !== "23505") break;
+    }
+
+    if (requestInsertError || !requestData) {
+      toast.error(requestInsertError?.message || "Failed to create request");
+      console.error("Create request error:", requestInsertError);
       setSaving(false);
       return;
     }
 
     // Insert items
     const requestItems = items.map((item) => ({
-      request_id: request.id,
+      request_id: requestData.id,
       description: item.description,
       quantity: item.quantity,
       unit: item.unit,

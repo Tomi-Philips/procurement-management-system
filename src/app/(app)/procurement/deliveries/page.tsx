@@ -69,18 +69,36 @@ export default function DeliveriesPage() {
     setSaving(true);
 
     const supabase = createClient();
-    // Generate delivery number using DB function
-    const { data: deliveryNumberData, error: numberError } = await supabase.rpc("generate_delivery_number");
-    const deliveryNumber = numberError ? `DEL-${Date.now().toString().slice(-5)}` : deliveryNumberData;
+    let deliveryNumber = "";
+    let deliveryInsertError: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data: deliveryNumberData, error: numberError } = await supabase.rpc("generate_delivery_number");
+      if (numberError || !deliveryNumberData) {
+        deliveryNumber = `DEL-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+      } else {
+        deliveryNumber = deliveryNumberData;
+      }
 
-    const { error } = await supabase.from("deliveries").insert({
-      purchase_order_id: selectedPO,
-      delivery_number: deliveryNumber,
-      expected_date: expectedDate || null,
-      notes: deliveryNotes || null,
-    });
+      const { error: insertError } = await supabase.from("deliveries").insert({
+        purchase_order_id: selectedPO,
+        delivery_number: deliveryNumber,
+        expected_date: expectedDate || null,
+        notes: deliveryNotes || null,
+      });
 
-    if (error) { toast.error("Failed to create delivery"); setSaving(false); return; }
+      if (!insertError) {
+        deliveryInsertError = null;
+        break;
+      }
+      deliveryInsertError = insertError;
+      if (insertError.code !== "23505") break;
+    }
+
+    if (deliveryInsertError) {
+      toast.error(deliveryInsertError.message || "Failed to create delivery");
+      setSaving(false);
+      return;
+    }
     toast.success("Delivery record created");
     setShowCreateModal(false);
     setSelectedPO("");
