@@ -75,11 +75,13 @@ export default function NewRequestPage() {
     setSaving(true);
     const supabase = createClient();
 
-    // request_number is generated atomically by the database (sequence default),
-    // so it is intentionally omitted from the insert payload.
+    // Generate unique request number
+    let requestNumber = `PR-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+
     const { data: reqData, error: insertError } = await supabase
       .from("procurement_requests")
       .insert({
+        request_number: requestNumber,
         title,
         department_id: departmentId,
         requester_id: profile!.id,

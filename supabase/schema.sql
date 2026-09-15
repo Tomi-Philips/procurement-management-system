@@ -407,8 +407,27 @@ CREATE POLICY "Procurement can manage suppliers" ON suppliers FOR ALL USING (
 CREATE POLICY "Users can view relevant requests" ON procurement_requests FOR SELECT USING (
   EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
   OR requester_id = auth.uid()
+  OR EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+      AND role = 'approver'
+      AND procurement_requests.status IN ('submitted', 'under_review')
+  )
   OR EXISTS (SELECT 1 FROM approvals WHERE request_id = procurement_requests.id AND approver_id = auth.uid())
-  OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'procurement_officer' AND status IN ('approved', 'processing', 'completed'))
+  OR EXISTS (
+    SELECT 1 FROM profiles
+    WHERE id = auth.uid()
+      AND role = 'procurement_officer'
+      AND procurement_requests.status IN ('approved', 'processing', 'completed')
+  )
+);
+CREATE POLICY "Approvers can act on pending requests" ON procurement_requests FOR UPDATE
+USING (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'approver')
+  AND procurement_requests.status IN ('submitted', 'under_review')
+)
+WITH CHECK (
+  EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'approver')
 );
 CREATE POLICY "Requesters can create requests" ON procurement_requests FOR INSERT WITH CHECK (
   requester_id = auth.uid()

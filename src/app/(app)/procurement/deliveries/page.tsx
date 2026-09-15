@@ -70,9 +70,10 @@ export default function DeliveriesPage() {
 
     const supabase = createClient();
 
-    // delivery_number is generated atomically by the database (sequence default),
-    // so it is intentionally omitted from the insert payload.
+    const deliveryNumber = `DEL-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+
     const { error: deliveryInsertError } = await supabase.from("deliveries").insert({
+      delivery_number: deliveryNumber,
       purchase_order_id: selectedPO,
       expected_date: expectedDate || null,
       notes: deliveryNotes || null,
