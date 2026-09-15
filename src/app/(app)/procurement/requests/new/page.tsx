@@ -75,9 +75,9 @@ export default function NewRequestPage() {
     setSaving(true);
     const supabase = createClient();
 
-    // Generate request number
-    const { count } = await supabase.from("procurement_requests").select("*", { count: "exact", head: true });
-    const requestNumber = `PR-${String((count ?? 0) + 1).padStart(5, "0")}`;
+    // Generate request number using DB function
+    const { data: requestNumberData, error: numberError } = await supabase.rpc("generate_request_number");
+    const requestNumber = numberError ? `PR-${Date.now().toString().slice(-5)}` : requestNumberData;
 
     const { data: request, error } = await supabase
       .from("procurement_requests")

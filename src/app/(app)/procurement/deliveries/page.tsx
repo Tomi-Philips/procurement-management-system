@@ -69,8 +69,9 @@ export default function DeliveriesPage() {
     setSaving(true);
 
     const supabase = createClient();
-    const { count } = await supabase.from("deliveries").select("*", { count: "exact", head: true });
-    const deliveryNumber = `DEL-${String((count ?? 0) + 1).padStart(5, "0")}`;
+    // Generate delivery number using DB function
+    const { data: deliveryNumberData, error: numberError } = await supabase.rpc("generate_delivery_number");
+    const deliveryNumber = numberError ? `DEL-${Date.now().toString().slice(-5)}` : deliveryNumberData;
 
     const { error } = await supabase.from("deliveries").insert({
       purchase_order_id: selectedPO,
