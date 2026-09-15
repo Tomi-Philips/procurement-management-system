@@ -137,7 +137,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-background">
       <Sidebar userRole={profile.role} onLogout={handleLogout} />
       <div className="lg:pl-64">
-        <TopBar profile={profile} unreadCount={unreadCount} />
+        <TopBar profile={profile} unreadCount={unreadCount} onLogout={handleLogout} />
         <main className="p-4 sm:p-6">{children}</main>
       </div>
     </div>

@@ -289,7 +289,7 @@ export default function NewRequestPage() {
                     placeholder="Specifications (optional)"
                   />
                   <p className="text-xs text-text-secondary text-right">
-                    Subtotal: ${((item.quantity * item.estimated_unit_price) || 0).toFixed(2)}
+                    Subtotal: ₦${((item.quantity * item.estimated_unit_price) || 0).toFixed(2)}
                   </p>
                 </div>
               ))}
@@ -298,7 +298,7 @@ export default function NewRequestPage() {
             <div className="rounded-lg border border-border bg-gray-50 p-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold text-foreground">Estimated Total</span>
-                <span className="text-lg font-semibold text-foreground">${estimatedTotal.toFixed(2)}</span>
+                <span className="text-lg font-semibold text-foreground">₦{estimatedTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>

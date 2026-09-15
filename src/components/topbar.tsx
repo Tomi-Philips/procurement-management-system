@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Search } from "lucide-react";
+import { Bell, Search, LogOut } from "lucide-react";
 import Link from "next/link";
 import type { Profile } from "@/lib/types";
 import { getRoleLabel } from "@/lib/permissions";
@@ -8,9 +8,11 @@ import { getRoleLabel } from "@/lib/permissions";
 export default function TopBar({
   profile,
   unreadCount,
+  onLogout,
 }: {
   profile: Profile;
   unreadCount: number;
+  onLogout?: () => void;
 }) {
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-surface/80 px-6 backdrop-blur-sm">
@@ -62,6 +64,16 @@ export default function TopBar({
             <p className="text-sm font-medium text-foreground">{profile?.full_name || "User"}</p>
             <p className="text-xs text-text-secondary">{profile?.email}</p>
           </div>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="ml-1 rounded-lg p-1.5 text-text-secondary transition-colors hover:bg-red-50 hover:text-red-600"
+              aria-label="Sign Out"
+              title="Sign Out"
+            >
+              <LogOut size={16} />
+            </button>
+          )}
         </div>
       </div>
     </header>
