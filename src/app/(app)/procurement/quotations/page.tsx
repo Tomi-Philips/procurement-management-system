@@ -2,19 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Plus, Search, Eye, FileText } from "lucide-react";
+import { Plus, Search, Eye } from "lucide-react";
 import StatusBadge from "@/components/ui/status-badge";
 import Pagination from "@/components/ui/pagination";
 import EmptyState from "@/components/ui/empty-state";
 import Modal from "@/components/ui/modal";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 import { toast } from "sonner";
-import type { Quotation, QuotationRequest, Supplier, ProcurementRequest, Profile } from "@/lib/types";
+import type { QuotationRequest, Supplier, ProcurementRequest, Profile } from "@/lib/types";
 
 const PAGE_SIZE = 10;
 
+type QuotationRequestRow = QuotationRequest & {
+  procurement_requests?: Pick<ProcurementRequest, "request_number" | "title"> | null;
+  quotation_request_suppliers?: { suppliers?: Pick<Supplier, "id" | "name" | "email"> | null }[];
+  quotations?: { count: number }[];
+};
+
 export default function QuotationsPage() {
-  const [quotations, setQuotations] = useState<(Quotation & { suppliers?: Supplier; procurement_requests?: ProcurementRequest })[]>([]);
+  const [quotationRequests, setQuotationRequests] = useState<QuotationRequestRow[]>([]);
   const [approvedRequests, setApprovedRequests] = useState<ProcurementRequest[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -41,19 +47,36 @@ export default function QuotationsPage() {
     const { data: prof } = await supabase.from("profiles").select("*").eq("id", user.id).single();
     setProfile(prof);
 
+    // quotation_requests is what "New Quotation Request" creates; quotations
+    // only exist after suppliers respond, so the list must be built from
+    // quotation_requests (with a count of submitted quotations per request).
+    // Plain (left) embeds so a row still lists even if a parent is hidden.
     let query = supabase
-      .from("quotations")
-      .select("*, suppliers(id, name), procurement_requests(request_number, title)", { count: "exact" });
+      .from("quotation_requests")
+      .select(
+        `*,
+        procurement_requests(request_number, title),
+        quotation_request_suppliers(suppliers(id, name, email)),
+        quotations(count)`,
+        { count: "exact" }
+      );
 
     if (search) {
-      query = query.or(`notes.ilike.%${search}%`);
+      query = query.or(
+        `procurement_requests.title.ilike.%${search}%,procurement_requests.request_number.ilike.%${search}%`
+      );
     }
 
-    const { data, count } = await query
+    const { data, error, count } = await query
       .order("created_at", { ascending: false })
       .range((page - 1) * PAGE_SIZE, page * PAGE_SIZE - 1);
 
-    setQuotations(data ?? []);
+    if (error) {
+      console.error("Failed to load quotation requests:", error);
+      toast.error("Failed to load quotation requests");
+    }
+
+    setQuotationRequests(data ?? []);
     setTotal(count ?? 0);
 
     // Load approved requests for creating new quotation requests
@@ -90,16 +113,24 @@ export default function QuotationsPage() {
       notes: notes || null,
     }).select().single();
 
-    if (error) { toast.error("Failed to create quotation request"); setSaving(false); return; }
+    if (error || !qr) { toast.error("Failed to create quotation request"); setSaving(false); return; }
 
     // Add suppliers
     const supplierInserts = selectedSuppliers.map((sid) => ({
       quotation_request_id: qr.id,
       supplier_id: sid,
     }));
-    await supabase.from("quotation_request_suppliers").insert(supplierInserts);
+    const { error: supplierError } = await supabase
+      .from("quotation_request_suppliers")
+      .insert(supplierInserts);
 
-    toast.success("Quotation request created");
+    if (supplierError) {
+      console.error("Failed to invite suppliers:", supplierError);
+      toast.error("Request created, but failed to invite suppliers");
+    } else {
+      toast.success("Quotation request created");
+    }
+
     setShowCreateModal(false);
     setSelectedRequest("");
     setSelectedSuppliers([]);
@@ -145,8 +176,8 @@ export default function QuotationsPage() {
           className="w-full rounded-lg border border-border bg-surface py-2.5 pl-10 pr-4 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary" />
       </div>
 
-      {quotations.length === 0 ? (
-        <EmptyState title="No quotations yet" description="Create a quotation request to invite suppliers to submit quotations." />
+      {quotationRequests.length === 0 ? (
+        <EmptyState title="No quotation requests yet" description="Create a quotation request to invite suppliers to submit quotations." />
       ) : (
         <div className="rounded-xl border border-border bg-surface overflow-hidden">
           <div className="overflow-x-auto">
@@ -154,29 +185,38 @@ export default function QuotationsPage() {
               <thead>
                 <tr className="border-b border-border bg-gray-50/50">
                   <th className="px-4 py-3 text-left font-medium text-text-secondary">Request #</th>
-                  <th className="px-4 py-3 text-left font-medium text-text-secondary">Supplier</th>
+                  <th className="px-4 py-3 text-left font-medium text-text-secondary">Title</th>
+                  <th className="px-4 py-3 text-left font-medium text-text-secondary">Invited Suppliers</th>
                   <th className="px-4 py-3 text-left font-medium text-text-secondary">Status</th>
-                  <th className="px-4 py-3 text-right font-medium text-text-secondary">Total Amount</th>
-                  <th className="px-4 py-3 text-left font-medium text-text-secondary">Submitted</th>
+                  <th className="px-4 py-3 text-right font-medium text-text-secondary">Quotations</th>
+                  <th className="px-4 py-3 text-left font-medium text-text-secondary">Deadline</th>
                   <th className="px-4 py-3 text-left font-medium text-text-secondary">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {quotations.map((q) => (
-                  <tr key={q.id} className="hover:bg-gray-50/50 transition-colors">
+                {quotationRequests.map((qr) => (
+                  <tr key={qr.id} className="hover:bg-gray-50/50 transition-colors">
                     <td className="px-4 py-3 font-medium text-foreground">
-                      {(q as any).procurement_requests?.request_number ?? "—"}
+                      {qr.procurement_requests?.request_number ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-foreground">
-                      {(q as any).suppliers?.name ?? "—"}
+                      {qr.procurement_requests?.title ?? "—"}
                     </td>
-                    <td className="px-4 py-3"><StatusBadge status={q.status} /></td>
-                    <td className="px-4 py-3 text-right text-foreground">{formatCurrency(q.total_amount)}</td>
+                    <td className="px-4 py-3 text-foreground">
+                      {(qr.quotation_request_suppliers ?? [])
+                        .map((qrs) => qrs.suppliers?.name)
+                        .filter(Boolean)
+                        .join(", ") || "—"}
+                    </td>
+                    <td className="px-4 py-3"><StatusBadge status={qr.status} /></td>
+                    <td className="px-4 py-3 text-right text-foreground">
+                      {qr.quotations?.[0]?.count ?? 0}
+                    </td>
                     <td className="px-4 py-3 text-text-secondary">
-                      {q.submitted_at ? formatDate(q.submitted_at) : "—"}
+                      {qr.deadline ? formatDate(qr.deadline) : "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <a href={`/procurement/quotations/${q.id}`}
+                      <a href={`/procurement/quotations/${qr.id}`}
                         className="rounded-lg p-1.5 text-text-secondary hover:bg-gray-100 hover:text-foreground inline-flex">
                         <Eye size={16} />
                       </a>
