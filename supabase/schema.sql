@@ -127,9 +127,11 @@ CREATE TABLE suppliers (
 );
 
 -- Procurement Requests
+CREATE SEQUENCE request_number_seq START 1;
+
 CREATE TABLE procurement_requests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  request_number TEXT NOT NULL UNIQUE,
+  request_number TEXT NOT NULL UNIQUE DEFAULT ('PR-' || LPAD(nextval('request_number_seq')::TEXT, 5, '0')),
   title TEXT NOT NULL,
   department_id UUID NOT NULL REFERENCES departments(id),
   requester_id UUID NOT NULL REFERENCES profiles(id),
@@ -233,9 +235,11 @@ CREATE TABLE supplier_evaluations (
 );
 
 -- Purchase Orders
+CREATE SEQUENCE po_number_seq START 1;
+
 CREATE TABLE purchase_orders (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  po_number TEXT NOT NULL UNIQUE,
+  po_number TEXT NOT NULL UNIQUE DEFAULT ('PO-' || LPAD(nextval('po_number_seq')::TEXT, 5, '0')),
   request_id UUID NOT NULL REFERENCES procurement_requests(id),
   supplier_id UUID NOT NULL REFERENCES suppliers(id),
   quotation_id UUID REFERENCES quotations(id),
@@ -263,10 +267,12 @@ CREATE TABLE purchase_order_items (
 );
 
 -- Deliveries
+CREATE SEQUENCE delivery_number_seq START 1;
+
 CREATE TABLE deliveries (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   purchase_order_id UUID NOT NULL REFERENCES purchase_orders(id),
-  delivery_number TEXT NOT NULL,
+  delivery_number TEXT NOT NULL DEFAULT ('DEL-' || LPAD(nextval('delivery_number_seq')::TEXT, 5, '0')),
   expected_date DATE,
   actual_date DATE,
   status delivery_status NOT NULL DEFAULT 'pending',
@@ -422,7 +428,13 @@ CREATE POLICY "Users can view request items" ON procurement_request_items FOR SE
     OR EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'procurement_officer', 'approver'))
   ))
 );
-CREATE POLICY "Requesters can manage own request items" ON procurement_request_items FOR ALL USING (
+CREATE POLICY "Requesters can insert items on own requests" ON procurement_request_items FOR INSERT WITH CHECK (
+  EXISTS (SELECT 1 FROM procurement_requests WHERE id = request_id AND requester_id = auth.uid() AND status IN ('draft', 'submitted'))
+);
+CREATE POLICY "Requesters can update own draft request items" ON procurement_request_items FOR UPDATE USING (
+  EXISTS (SELECT 1 FROM procurement_requests WHERE id = request_id AND requester_id = auth.uid() AND status = 'draft')
+);
+CREATE POLICY "Requesters can delete own draft request items" ON procurement_request_items FOR DELETE USING (
   EXISTS (SELECT 1 FROM procurement_requests WHERE id = request_id AND requester_id = auth.uid() AND status = 'draft')
 );
 CREATE POLICY "Admins can manage all request items" ON procurement_request_items FOR ALL USING (
@@ -569,53 +581,10 @@ CREATE POLICY "System can create audit logs" ON audit_logs FOR INSERT WITH CHECK
 -- FUNCTIONS
 -- ============================================
 
--- Function to generate request number
-CREATE OR REPLACE FUNCTION generate_request_number()
-RETURNS TEXT AS $$
-DECLARE
-  next_num INTEGER;
-  result TEXT;
-BEGIN
-  SELECT COALESCE(MAX(CAST(SUBSTRING(request_number FROM 6) AS INTEGER)), 0) + 1
-  INTO next_num
-  FROM procurement_requests;
-
-  result := 'PR-' || LPAD(next_num::TEXT, 5, '0');
-  RETURN result;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
-
--- Function to generate PO number
-CREATE OR REPLACE FUNCTION generate_po_number()
-RETURNS TEXT AS $$
-DECLARE
-  next_num INTEGER;
-  result TEXT;
-BEGIN
-  SELECT COALESCE(MAX(CAST(SUBSTRING(po_number FROM 4) AS INTEGER)), 0) + 1
-  INTO next_num
-  FROM purchase_orders;
-
-  result := 'PO-' || LPAD(next_num::TEXT, 5, '0');
-  RETURN result;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
-
--- Function to generate delivery number
-CREATE OR REPLACE FUNCTION generate_delivery_number()
-RETURNS TEXT AS $$
-DECLARE
-  next_num INTEGER;
-  result TEXT;
-BEGIN
-  SELECT COALESCE(MAX(CAST(SUBSTRING(delivery_number FROM 5) AS INTEGER)), 0) + 1
-  INTO next_num
-  FROM deliveries;
-
-  result := 'DEL-' || LPAD(next_num::TEXT, 5, '0');
-  RETURN result;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+-- Document numbers (PR-/PO-/DEL-xxxxx) are generated atomically by Postgres
+-- sequences wired to the column DEFAULTs on procurement_requests, purchase_orders
+-- and deliveries. A sequence never hands out the same value twice, so concurrent
+-- inserts (and users with different RLS row visibility) can never collide.
 
 -- Function to update supplier performance score
 CREATE OR REPLACE FUNCTION update_supplier_performance()

@@ -75,42 +75,26 @@ export default function NewRequestPage() {
     setSaving(true);
     const supabase = createClient();
 
-    let requestData: any = null;
-    let requestInsertError: any = null;
-    let requestNumber = "";
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const { data: requestNumberData, error: numberError } = await supabase.rpc("generate_request_number");
-      if (numberError || !requestNumberData) {
-        requestNumber = `PR-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      } else {
-        requestNumber = requestNumberData;
-      }
+    // request_number is generated atomically by the database (sequence default),
+    // so it is intentionally omitted from the insert payload.
+    const { data: reqData, error: insertError } = await supabase
+      .from("procurement_requests")
+      .insert({
+        title,
+        department_id: departmentId,
+        requester_id: profile!.id,
+        purpose,
+        description,
+        required_date: requiredDate || null,
+        priority,
+        status: isDraft ? "draft" : "submitted",
+        estimated_total: estimatedTotal,
+      })
+      .select()
+      .single();
 
-      const { data: reqData, error: insertError } = await supabase
-        .from("procurement_requests")
-        .insert({
-          request_number: requestNumber,
-          title,
-          department_id: departmentId,
-          requester_id: profile!.id,
-          purpose,
-          description,
-          required_date: requiredDate || null,
-          priority,
-          status: isDraft ? "draft" : "submitted",
-          estimated_total: estimatedTotal,
-        })
-        .select()
-        .single();
-
-      if (!insertError) {
-        requestData = reqData;
-        requestInsertError = null;
-        break;
-      }
-      requestInsertError = insertError;
-      if (insertError.code !== "23505") break;
-    }
+    const requestData = reqData;
+    const requestInsertError = insertError;
 
     if (requestInsertError || !requestData) {
       toast.error(requestInsertError?.message || "Failed to create request");
@@ -132,7 +116,8 @@ export default function NewRequestPage() {
     const { error: itemsError } = await supabase.from("procurement_request_items").insert(requestItems);
 
     if (itemsError) {
-      toast.error("Failed to add items");
+      toast.error(itemsError.message || "Failed to add items");
+      console.error("Add items error:", itemsError);
       setSaving(false);
       return;
     }

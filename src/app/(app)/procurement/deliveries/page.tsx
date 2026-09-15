@@ -69,30 +69,14 @@ export default function DeliveriesPage() {
     setSaving(true);
 
     const supabase = createClient();
-    let deliveryNumber = "";
-    let deliveryInsertError: any = null;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const { data: deliveryNumberData, error: numberError } = await supabase.rpc("generate_delivery_number");
-      if (numberError || !deliveryNumberData) {
-        deliveryNumber = `DEL-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      } else {
-        deliveryNumber = deliveryNumberData;
-      }
 
-      const { error: insertError } = await supabase.from("deliveries").insert({
-        purchase_order_id: selectedPO,
-        delivery_number: deliveryNumber,
-        expected_date: expectedDate || null,
-        notes: deliveryNotes || null,
-      });
-
-      if (!insertError) {
-        deliveryInsertError = null;
-        break;
-      }
-      deliveryInsertError = insertError;
-      if (insertError.code !== "23505") break;
-    }
+    // delivery_number is generated atomically by the database (sequence default),
+    // so it is intentionally omitted from the insert payload.
+    const { error: deliveryInsertError } = await supabase.from("deliveries").insert({
+      purchase_order_id: selectedPO,
+      expected_date: expectedDate || null,
+      notes: deliveryNotes || null,
+    });
 
     if (deliveryInsertError) {
       toast.error(deliveryInsertError.message || "Failed to create delivery");
