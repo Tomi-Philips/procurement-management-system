@@ -583,7 +583,7 @@ BEGIN
   result := 'PR-' || LPAD(next_num::TEXT, 5, '0');
   RETURN result;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Function to generate PO number
 CREATE OR REPLACE FUNCTION generate_po_number()
@@ -599,7 +599,7 @@ BEGIN
   result := 'PO-' || LPAD(next_num::TEXT, 5, '0');
   RETURN result;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Function to generate delivery number
 CREATE OR REPLACE FUNCTION generate_delivery_number()
@@ -615,7 +615,7 @@ BEGIN
   result := 'DEL-' || LPAD(next_num::TEXT, 5, '0');
   RETURN result;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Function to update supplier performance score
 CREATE OR REPLACE FUNCTION update_supplier_performance()

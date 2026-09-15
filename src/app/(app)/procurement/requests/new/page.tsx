@@ -81,7 +81,7 @@ export default function NewRequestPage() {
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data: requestNumberData, error: numberError } = await supabase.rpc("generate_request_number");
       if (numberError || !requestNumberData) {
-        requestNumber = `PR-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+        requestNumber = `PR-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       } else {
         requestNumber = requestNumberData;
       }

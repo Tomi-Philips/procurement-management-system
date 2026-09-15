@@ -74,7 +74,7 @@ export default function DeliveriesPage() {
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data: deliveryNumberData, error: numberError } = await supabase.rpc("generate_delivery_number");
       if (numberError || !deliveryNumberData) {
-        deliveryNumber = `DEL-${Date.now().toString(36).toUpperCase()}${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+        deliveryNumber = `DEL-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       } else {
         deliveryNumber = deliveryNumberData;
       }
